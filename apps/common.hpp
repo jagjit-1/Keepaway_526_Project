@@ -6,6 +6,11 @@
 // ---------------------------------------------------------------------------
 #pragma once
 
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <fstream>
+#include <string>
 #include <vector>
 #include "sim/keepaway_env.hpp"
 

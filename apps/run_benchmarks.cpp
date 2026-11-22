@@ -126,6 +126,6 @@ int main(int argc, char **argv)
   for (const Row &r : rows)
     print_row(r.name, r.eps);
 
-  save_csv(rows, out_dir + "/benchmarks.csv");
+  save_csv(rows, out_dir + "/benchmarks");
   return 0;
 }

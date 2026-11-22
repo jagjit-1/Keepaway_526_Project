@@ -6,16 +6,16 @@
 //          all things you changed"
 // ---------------------------------------------------------------------------
 #include <cmath>
-#include <cstdint> // [Claude]
-#include <fstream> // [Claude]
+#include <cstdint>   // [Claude]
+#include <fstream>   // [Claude]
 #include <stdexcept> // [Claude]
-#include <string> // [Claude]
+#include <string>    // [Claude]
 #include <vector>
 
 #include "train.hpp" // [Claude]
 #include "approximator.hpp"
 #include "sim/keepaway_env.hpp"
-#include "tile_coding.hpp"
+#include "q_learning.hpp"
 #include "../apps/common.hpp"
 
 namespace keepaway

@@ -1,4 +1,4 @@
-#include "tile_coding.hpp"
+#include "q_learning.hpp"
 #include <vector>
 #include <fstream>   // ofstream / ifstream: write to / read from a file
 #include <iomanip>   // setprecision
@@ -47,12 +47,12 @@ namespace keepaway
     vector<int> TileCoding::active_tiles(const vector<double> &x, int action) const
     {
         vector<int> result;
+        const double tile_width = 1.0 / num_of_tiles_;
         for (int sv = 0; sv < num_of_state_variables_; sv++)
         {
             for (int tiling = 0; tiling < num_of_tilings_; tiling++)
             {
                 // since every feature value is normalized, the width of each tiling is 1
-                double tile_width = 1.0 / num_of_tiles_;
                 double tile_shift = (tiling * tile_width) / num_of_tilings_;
 
                 for (int tile = 0; tile < num_of_tiles_ + 1; tile++)

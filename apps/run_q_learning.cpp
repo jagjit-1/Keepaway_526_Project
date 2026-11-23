@@ -35,12 +35,10 @@ namespace keepaway
     std::vector<Row> tile_coding(const std::vector<Feature> &features, HyperParameters &hp, Config_TC &cfg_tc, const Config &cfg, int seed_count)
     {
         std::vector<Row> runs;
-        int seed = 1;
         for (int i = 0; i < seed_count; i++)
         {
-            hp.seed = seed;
-            runs.push_back({"seed-" + std::to_string(seed), tile_coding(features, hp, cfg_tc, cfg)});
-            seed = 1 + i * seed_multiplier;
+            hp.seed = 10 + i * seed_multiplier;
+            runs.push_back({"seed-" + std::to_string(hp.seed), tile_coding(features, hp, cfg_tc, cfg)});
         }
         for (const Row &r : runs)
         {
@@ -55,19 +53,16 @@ namespace keepaway
         Env env(cfg);
         cfg_rbf.alpha = hp.alpha;
         RadialBasisFunction q(cfg_rbf);
-        std::vector<Row> rows;
         return train_loop(q, env, cfg, features, hp.gamma, hp.episodes, hp.seed);
     }
 
     std::vector<Row> rbf(const std::vector<Feature> &features, HyperParameters &hp, Config_RBF &cfg_rbf, const Config &cfg, int seed_count)
     {
         std::vector<Row> runs;
-        int seed = 1;
         for (int i = 0; i < seed_count; i++)
         {
-            hp.seed = seed;
-            runs.push_back({"seed-" + std::to_string(seed), rbf(features, hp, cfg_rbf, cfg)});
-            seed = 1 + i * seed_multiplier;
+            hp.seed = 10 + i * seed_multiplier;
+            runs.push_back({"seed-" + std::to_string(hp.seed), rbf(features, hp, cfg_rbf, cfg)});
         }
 
         for (const Row &r : runs)
@@ -97,18 +92,27 @@ namespace keepaway
     {
         HyperParameters hp{.episodes = 20000, .alpha = 0.05 / (cfg_tc.num_of_state_variables * cfg_tc.num_of_tilings), .gamma = 0.99};
 
-        // 1.1.1 alpha = 0.05
-        save_csv(tile_coding(kFullFeatures, hp, cfg_tc, cfg, 3), "results/tc-alpha-tune-0.05");
-        // 1.1.2 alpha = 0.1
+        // 1.1.1 alpha = 0.1
         hp.alpha = 0.1 / (cfg_tc.num_of_state_variables * cfg_tc.num_of_tilings);
         save_csv(tile_coding(kFullFeatures, hp, cfg_tc, cfg, 3), "results/tc-alpha-tune-0.1");
-        // 1.1.3 alpha = 0.2
-        hp.alpha = 0.2 / (cfg_tc.num_of_state_variables * cfg_tc.num_of_tilings);
-        save_csv(tile_coding(kFullFeatures, hp, cfg_tc, cfg, 3), "results/tc-alpha-tune-0.2");
 
+        // 1.1.3 alpha = 0.3
         hp.alpha = 0.3 / (cfg_tc.num_of_state_variables * cfg_tc.num_of_tilings);
         save_csv(tile_coding(kFullFeatures, hp, cfg_tc, cfg, 3), "results/tc-alpha-tune-0.3");
 
+        // 1.1.5 alpha = 0.5
+        hp.alpha = 0.5 / (cfg_tc.num_of_state_variables * cfg_tc.num_of_tilings);
+        save_csv(tile_coding(kFullFeatures, hp, cfg_tc, cfg, 3), "results/tc-alpha-tune-0.5");
+
+        // 1.1.6 alpha = 0.6
+        hp.alpha = 0.6 / (cfg_tc.num_of_state_variables * cfg_tc.num_of_tilings);
+        save_csv(tile_coding(kFullFeatures, hp, cfg_tc, cfg, 3), "results/tc-alpha-tune-0.6");
+
+        // 1.1.7 alpha = 0.7
+        hp.alpha = 0.7 / (cfg_tc.num_of_state_variables * cfg_tc.num_of_tilings);
+        save_csv(tile_coding(kFullFeatures, hp, cfg_tc, cfg, 3), "results/tc-alpha-tune-0.7");
+
+        // 1.1.8 alpha = 0.8
         hp.alpha = 0.8 / (cfg_tc.num_of_state_variables * cfg_tc.num_of_tilings);
         save_csv(tile_coding(kFullFeatures, hp, cfg_tc, cfg, 3), "results/tc-alpha-tune-0.8");
     }
@@ -116,7 +120,7 @@ namespace keepaway
     void tc_tile_sweep(Config_TC &cfg_tc, Config &cfg)
     {
         // optimal values found using last sweeps
-        HyperParameters hp{.episodes = 20000, .alpha = 0.5 / (cfg_tc.num_of_state_variables * cfg_tc.num_of_tilings), .gamma = 0.99};
+        HyperParameters hp{.episodes = 20000, .alpha = 0.6 / (cfg_tc.num_of_state_variables * cfg_tc.num_of_tilings), .gamma = 0.99};
 
         // 1.3.1 Start with 1/100 resolution, tiles = 10
         cfg_tc.num_of_tiles = 10;
@@ -132,7 +136,7 @@ namespace keepaway
     void tc_cmp_keeper(Config_TC &cfg_tc, Config &cfg)
     {
         // optimal values found using last sweeps
-        HyperParameters hp{.episodes = 20000, .alpha = 0.5 / (cfg_tc.num_of_state_variables * cfg_tc.num_of_tilings), .gamma = 0.99};
+        HyperParameters hp{.episodes = 20000, .alpha = 0.6 / (cfg_tc.num_of_state_variables * cfg_tc.num_of_tilings), .gamma = 0.99};
         cfg_tc.num_of_tiles = 20;
 
         cfg.keepers = {Controller::External, Controller::HandCoded, Controller::HandCoded};
@@ -163,22 +167,25 @@ namespace keepaway
     {
         HyperParameters hp{.episodes = 20000, .alpha = 0.6 / (cfg_rbf.num_of_state_variables), .gamma = 0.99};
 
+        // sd = 0.005
+        cfg_rbf.standard_deviation = 0.005;
+        save_csv(rbf(kFullFeatures, hp, cfg_rbf, cfg, 3), "results/rbf-sd-tune-0.005");
         // sd = 0.01
-        cfg_rbf.standard_deviation = 0.01;
-        save_csv(rbf(kFullFeatures, hp, cfg_rbf, cfg, 3), "results/rbf-sd-tune-0.01");
-        // sd = 0.025
-        cfg_rbf.standard_deviation = 0.025;
-        save_csv(rbf(kFullFeatures, hp, cfg_rbf, cfg, 3), "results/rbf-sd-tune-0.025");
-        // sd = 0.04
-        cfg_rbf.standard_deviation = 0.04;
-        save_csv(rbf(kFullFeatures, hp, cfg_rbf, cfg, 3), "results/rbf-sd-tune-0.04");
+        // cfg_rbf.standard_deviation = 0.01;
+        // save_csv(rbf(kFullFeatures, hp, cfg_rbf, cfg, 3), "results/rbf-sd-tune-0.01");
+        // // sd = 0.025
+        // cfg_rbf.standard_deviation = 0.025;
+        // save_csv(rbf(kFullFeatures, hp, cfg_rbf, cfg, 3), "results/rbf-sd-tune-0.025");
+        // // sd = 0.04
+        // cfg_rbf.standard_deviation = 0.04;
+        // save_csv(rbf(kFullFeatures, hp, cfg_rbf, cfg, 3), "results/rbf-sd-tune-0.04");
     }
 
     void cmp_tc_rbf(Config_TC &cfg_tc, Config_RBF &cfg_rbf, Config &cfg)
     {
         HyperParameters hp{.episodes = 20000, .gamma = 0.99};
         cfg_rbf.num_of_tiles = 20 * 10;
-        cfg_rbf.standard_deviation = 0.025;
+        cfg_rbf.standard_deviation = 0.01;
         cfg_tc.num_of_tiles = 20;
 
         hp.alpha = 0.6 / (cfg_tc.num_of_state_variables * cfg_tc.num_of_tilings);
@@ -187,22 +194,6 @@ namespace keepaway
         hp.alpha = 0.6 / (cfg_rbf.num_of_state_variables);
         save_csv(rbf(kFullFeatures, hp, cfg_rbf, cfg, 10), "results/cmp-rbf-final");
     }
-
-    // Check these config values, we might need to do some tests to arrive at optimal configs
-    // config.num_of_actions = kNumActions;
-    // config.num_of_tiles = 100;
-    // config.num_of_state_variables = subset.size();
-    // config.standard_deviation = 0.025;
-    // config.alpha = 0.225 / config.num_of_state_variables;
-
-    // Check these config values, we might need to do some tests to arrive at optimal configs
-    // config.num_of_actions = kNumActions;
-    // config.num_of_tiles = 10;
-    // config.num_of_tilings = 10;
-    // config.num_of_state_variables = subset.size();
-    // config.alpha = 0.1 / (config.num_of_state_variables * config.num_of_tilings);
-    // save_csv(rows, out_dir);
-
 }
 
 enum TestCase
@@ -213,7 +204,8 @@ enum TestCase
     CMP_TC_1_3_KEEPER,
     RBF_ALPHA_SWEEP,
     RBF_SIGMA_SWEEP,
-    CMP_TC_RBF
+    CMP_TC_RBF,
+    NULL_CASE
 };
 
 TestCase cast_case(const std::string &sweepCase)
@@ -233,7 +225,7 @@ TestCase cast_case(const std::string &sweepCase)
     if ("cmp_tc_rbf" == sweepCase)
         return CMP_TC_RBF;
 
-    return TC_GAMMA_SWEEP;
+    return NULL_CASE;
 }
 
 int main(int argc, char **argv)
@@ -245,6 +237,8 @@ int main(int argc, char **argv)
     {
         sc = cast_case(std::string(argv[1]));
     }
+
+    std::cout << "Running Case: " << sc << '\n';
 
     // Tile Coding
     // INITIAL START VALUES (Sv=Full, Tiling=10, tiles=10, gamma=0.9, alpha=0.1)
@@ -301,6 +295,9 @@ int main(int argc, char **argv)
         // SubCase 1: Run RBF and TC with optimal parameters found, across multiple seeds
         cmp_tc_rbf(cfg_tc, cfg_rbf, cfg);
         return 0;
+    default:
+        printf("Case not recognized\n");
+        return 1;
     }
 
     // Reduced feature comparision

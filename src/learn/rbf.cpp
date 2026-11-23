@@ -50,7 +50,7 @@ namespace keepaway
             for (int tile = 0; tile < num_of_tiles_; tile++)
             {
                 const double mid = (tile_width / 2) + tile * tile_width;
-                if (abs(x[sv] - mid) < std_threshold)
+                if (std::abs(x[sv] - mid) < std_threshold)
                 {
                     scores[tile] = calculate_tile_score(x[sv], mid, standard_deviation_);
                     squared_score_sum += scores[tile] * scores[tile];

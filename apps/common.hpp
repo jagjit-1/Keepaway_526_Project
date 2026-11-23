@@ -9,6 +9,7 @@
 #pragma once
 
 #include <vector>
+#include <algorithm>
 #include <sstream>
 #include <chrono>
 #include <fstream>

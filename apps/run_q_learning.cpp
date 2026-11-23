@@ -19,10 +19,11 @@ namespace keepaway
     int seed_multiplier = 100000;
     struct HyperParameters
     {
-        int episodes;
-        int seed;
-        double alpha;
-        double gamma;
+        int episodes = 20000;
+        int seed = 1;
+        double alpha = 0.05;
+        double gamma = 0.99;
+        double epsilon = 0.05;
     };
 
     std::vector<Episode> tile_coding(const std::vector<Feature> &features, const HyperParameters &hp, Config_TC &cfg_tc, const Config &cfg)
@@ -30,7 +31,7 @@ namespace keepaway
         Env env(cfg);
         cfg_tc.alpha = hp.alpha;
         TileCoding q(cfg_tc);
-        return train_loop(q, env, cfg, features, hp.gamma, hp.episodes, hp.seed);
+        return train_loop(q, env, cfg, features, hp.gamma, hp.episodes, hp.seed, hp.epsilon);
     }
     std::vector<Row> tile_coding(const std::vector<Feature> &features, HyperParameters &hp, Config_TC &cfg_tc, const Config &cfg, int seed_count)
     {
@@ -53,7 +54,7 @@ namespace keepaway
         Env env(cfg);
         cfg_rbf.alpha = hp.alpha;
         RadialBasisFunction q(cfg_rbf);
-        return train_loop(q, env, cfg, features, hp.gamma, hp.episodes, hp.seed);
+        return train_loop(q, env, cfg, features, hp.gamma, hp.episodes, hp.seed, hp.epsilon);
     }
 
     std::vector<Row> rbf(const std::vector<Feature> &features, HyperParameters &hp, Config_RBF &cfg_rbf, const Config &cfg, int seed_count)

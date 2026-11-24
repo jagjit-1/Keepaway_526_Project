@@ -195,6 +195,24 @@ namespace keepaway
         hp.alpha = 0.6 / (cfg_rbf.num_of_state_variables);
         save_csv(rbf(kFullFeatures, hp, cfg_rbf, cfg, 10), "results/cmp-rbf-final");
     }
+
+    void cmp_tc_rbf_reduced(Config_TC &cfg_tc, Config_RBF &cfg_rbf, Config &cfg)
+    {
+        // OPTIMAL VALUES FROM SWEEPS
+        HyperParameters hp{.episodes = 20000, .gamma = 0.99};
+        cfg_rbf.num_of_tiles = 20 * 10;
+        cfg_rbf.standard_deviation = 0.01;
+        cfg_tc.num_of_tiles = 20;
+
+        cfg_tc.num_of_state_variables = kReducedFeatures.size();
+        cfg_rbf.num_of_state_variables = kReducedFeatures.size();
+
+        hp.alpha = 0.6 / (cfg_tc.num_of_state_variables * cfg_tc.num_of_tilings);
+        save_csv(tile_coding(kReducedFeatures, hp, cfg_tc, cfg, 10), "results/cmp-tc-reduced-final");
+
+        hp.alpha = 0.6 / (cfg_rbf.num_of_state_variables);
+        save_csv(rbf(kReducedFeatures, hp, cfg_rbf, cfg, 10), "results/cmp-rbf-reduced-final");
+    }
 }
 
 enum TestCase
@@ -206,6 +224,7 @@ enum TestCase
     RBF_ALPHA_SWEEP,
     RBF_SIGMA_SWEEP,
     CMP_TC_RBF,
+    CMP_TC_RBF_REDUCED,
     NULL_CASE
 };
 
@@ -225,6 +244,8 @@ TestCase cast_case(const std::string &sweepCase)
         return RBF_SIGMA_SWEEP;
     if ("cmp_tc_rbf" == sweepCase)
         return CMP_TC_RBF;
+    if ("cmp_tc_rbf_reduced" == sweepCase)
+        return CMP_TC_RBF_REDUCED;
 
     return NULL_CASE;
 }
@@ -296,14 +317,14 @@ int main(int argc, char **argv)
         // SubCase 1: Run RBF and TC with optimal parameters found, across multiple seeds
         cmp_tc_rbf(cfg_tc, cfg_rbf, cfg);
         return 0;
+
+    // Reduced feature comparision
+    case CMP_TC_RBF_REDUCED:
+        // == Case 1: Comparison of both on reduced features
+        cmp_tc_rbf_reduced(cfg_tc, cfg_rbf, cfg);
+        return 0;
     default:
         printf("Case not recognized\n");
         return 1;
     }
-
-    // Reduced feature comparision
-    // INITIAL START VALUES -> optimals from both rbf and tc
-    // == Case 1: Comparison of both on reduced features
-
-    // END
 }

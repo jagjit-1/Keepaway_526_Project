@@ -16,6 +16,11 @@
 //
 // Partially generated with assistance from AI (DeepMind Antigravity / Claude)
 // and adapted/verified by human authors.
+//
+// Changed by an LLM: Claude (Anthropic), 2026-11-23, at Jagjit's request:
+// train_rl now applies the update to the state where the action was taken
+// (q.update(x, a, target) before x = x2; previously x was overwritten first).
+// Prompts (verbatim): see the header of apps/run_q_learning.cpp, 2026-11-23.
 // ---------------------------------------------------------------------------
 
 #include "train.hpp"
@@ -120,12 +125,13 @@ std::vector<Episode> train_rl(Approximator& q, Env& env, const Config& cfg, cons
 
       double target = 0.0;
       Action next_a = a;
+      std::vector<double> x2;
 
       if (r.done) {
         // Terminal state: reward = -gamma^(k - 1)
         target = -std::pow(gamma, k - 1);
       } else {
-        auto x2 = normalize(select_features(r.next.state, subset), subset, cfg);
+        x2 = normalize(select_features(r.next.state, subset), subset, cfg);
 
         if (algo == RLAlgorithm::Sarsa) {
           // On-policy Sarsa: pick next action using epsilon-greedy policy
@@ -136,12 +142,11 @@ std::vector<Episode> train_rl(Approximator& q, Env& env, const Config& cfg, cons
           target = std::pow(gamma, k) * max_over_actions(q, x2);
           next_a = epsilon_greedy(q, x2, epsilon, rng);
         }
-
-        // Prepare next state for the following iteration
-        x = x2;
       }
 
+      // Update the state where action a was taken, then move on to the next state
       q.update(x, a, target);
+      if (!r.done) x = x2;
       a = next_a;
     }
     out.push_back({env.episode_seconds(), env.end_reason()});

@@ -5,6 +5,19 @@
 //   1. "can u fix the remaning parts, also possible actions does exist, tell me what
 //          all things you changed"
 //   2. "can you add 1000 averages in the code itself"
+//
+// Also changed by an LLM: Claude (Anthropic), 2026-11-23: HyperParameters.weights_dir,
+// weight saving after each seed in tile_coding() and rbf(), and epsilon = 0.02 plus a
+// weights folder in cmp_tc_rbf() and cmp_tc_rbf_reduced().
+// Prompts (verbatim):
+//   3. "Can you * fix the `x = x2` bug; * use γ = 0.99; * use the same 10 seeds
+//          (10, 100010, …) in neural eval * run both feature sets (13 and 4); * run at
+//          least as many episodes as you compare at, 10k or 20k; * score from the
+//          training curve. But i want to also save weights from all approximators
+//          somewhere in this run. Plan for it and get approval first from me For
+//          declerations use the format that is being already used in code"
+//   4. "use 0.02 for e, episodes 20k, use same loop, also for decleration you dont
+//          need to mark each line with [Claude]  just header at top is fine"
 // ---------------------------------------------------------------------------
 #include <filesystem> // [Claude]
 #include <iostream>
@@ -24,14 +37,26 @@ namespace keepaway
         double alpha = 0.05;
         double gamma = 0.99;
         double epsilon = 0.05;
+        std::string weights_dir = ""; // if set, the learned weights of each seed are saved here
     };
+
+    // Saves q's weights to <weights_dir>/seed-<seed>.txt (does nothing if weights_dir is empty).
+    void save_weights(const Approximator &q, const HyperParameters &hp)
+    {
+        if (hp.weights_dir.empty())
+            return;
+        std::filesystem::create_directories(hp.weights_dir);
+        q.save(hp.weights_dir + "/seed-" + std::to_string(hp.seed) + ".txt");
+    }
 
     std::vector<Episode> tile_coding(const std::vector<Feature> &features, const HyperParameters &hp, Config_TC &cfg_tc, const Config &cfg)
     {
         Env env(cfg);
         cfg_tc.alpha = hp.alpha;
         TileCoding q(cfg_tc);
-        return train_loop(q, env, cfg, features, hp.gamma, hp.episodes, hp.seed, hp.epsilon);
+        std::vector<Episode> eps = train_loop(q, env, cfg, features, hp.gamma, hp.episodes, hp.seed, hp.epsilon);
+        save_weights(q, hp);
+        return eps;
     }
     std::vector<Row> tile_coding(const std::vector<Feature> &features, HyperParameters &hp, Config_TC &cfg_tc, const Config &cfg, int seed_count)
     {
@@ -54,7 +79,9 @@ namespace keepaway
         Env env(cfg);
         cfg_rbf.alpha = hp.alpha;
         RadialBasisFunction q(cfg_rbf);
-        return train_loop(q, env, cfg, features, hp.gamma, hp.episodes, hp.seed, hp.epsilon);
+        std::vector<Episode> eps = train_loop(q, env, cfg, features, hp.gamma, hp.episodes, hp.seed, hp.epsilon);
+        save_weights(q, hp);
+        return eps;
     }
 
     std::vector<Row> rbf(const std::vector<Feature> &features, HyperParameters &hp, Config_RBF &cfg_rbf, const Config &cfg, int seed_count)
@@ -172,34 +199,36 @@ namespace keepaway
         cfg_rbf.standard_deviation = 0.005;
         save_csv(rbf(kFullFeatures, hp, cfg_rbf, cfg, 3), "results/rbf-sd-tune-0.005");
         // sd = 0.01
-        // cfg_rbf.standard_deviation = 0.01;
-        // save_csv(rbf(kFullFeatures, hp, cfg_rbf, cfg, 3), "results/rbf-sd-tune-0.01");
-        // // sd = 0.025
-        // cfg_rbf.standard_deviation = 0.025;
-        // save_csv(rbf(kFullFeatures, hp, cfg_rbf, cfg, 3), "results/rbf-sd-tune-0.025");
-        // // sd = 0.04
-        // cfg_rbf.standard_deviation = 0.04;
-        // save_csv(rbf(kFullFeatures, hp, cfg_rbf, cfg, 3), "results/rbf-sd-tune-0.04");
+        cfg_rbf.standard_deviation = 0.01;
+        save_csv(rbf(kFullFeatures, hp, cfg_rbf, cfg, 3), "results/rbf-sd-tune-0.01");
+        // sd = 0.025
+        cfg_rbf.standard_deviation = 0.025;
+        save_csv(rbf(kFullFeatures, hp, cfg_rbf, cfg, 3), "results/rbf-sd-tune-0.025");
+        // sd = 0.04
+        cfg_rbf.standard_deviation = 0.04;
+        save_csv(rbf(kFullFeatures, hp, cfg_rbf, cfg, 3), "results/rbf-sd-tune-0.04");
     }
 
     void cmp_tc_rbf(Config_TC &cfg_tc, Config_RBF &cfg_rbf, Config &cfg)
     {
-        HyperParameters hp{.episodes = 20000, .gamma = 0.99};
+        HyperParameters hp{.episodes = 20000, .gamma = 0.99, .epsilon = 0.02};
         cfg_rbf.num_of_tiles = 20 * 10;
         cfg_rbf.standard_deviation = 0.01;
         cfg_tc.num_of_tiles = 20;
 
         hp.alpha = 0.6 / (cfg_tc.num_of_state_variables * cfg_tc.num_of_tilings);
+        hp.weights_dir = "results/weights/cmp-tc-final";
         save_csv(tile_coding(kFullFeatures, hp, cfg_tc, cfg, 10), "results/cmp-tc-final");
 
         hp.alpha = 0.6 / (cfg_rbf.num_of_state_variables);
+        hp.weights_dir = "results/weights/cmp-rbf-final";
         save_csv(rbf(kFullFeatures, hp, cfg_rbf, cfg, 10), "results/cmp-rbf-final");
     }
 
     void cmp_tc_rbf_reduced(Config_TC &cfg_tc, Config_RBF &cfg_rbf, Config &cfg)
     {
         // OPTIMAL VALUES FROM SWEEPS
-        HyperParameters hp{.episodes = 20000, .gamma = 0.99};
+        HyperParameters hp{.episodes = 20000, .gamma = 0.99, .epsilon = 0.02};
         cfg_rbf.num_of_tiles = 20 * 10;
         cfg_rbf.standard_deviation = 0.01;
         cfg_tc.num_of_tiles = 20;
@@ -208,9 +237,11 @@ namespace keepaway
         cfg_rbf.num_of_state_variables = kReducedFeatures.size();
 
         hp.alpha = 0.6 / (cfg_tc.num_of_state_variables * cfg_tc.num_of_tilings);
+        hp.weights_dir = "results/weights/cmp-tc-reduced-final";
         save_csv(tile_coding(kReducedFeatures, hp, cfg_tc, cfg, 10), "results/cmp-tc-reduced-final");
 
         hp.alpha = 0.6 / (cfg_rbf.num_of_state_variables);
+        hp.weights_dir = "results/weights/cmp-rbf-reduced-final";
         save_csv(rbf(kReducedFeatures, hp, cfg_rbf, cfg, 10), "results/cmp-rbf-reduced-final");
     }
 }

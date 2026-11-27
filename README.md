@@ -15,6 +15,7 @@ This project implements, evaluates, and compares multiple value-function approxi
 In compliance with academic integrity guidelines:
 - **Partial AI Generation**: Code structure, initial implementations of simulators/neural network routines, boilerplate build scripts, and initial draft visualizations were generated or refactored with the assistance of Large Language Models (Anthropic Claude & Google DeepMind Antigravity).
 - **Human Author Contribution**: Problem formulation, parameter tuning, experimental runs, verification, debugging of compiler/environment configurations, integration of true $\epsilon$-greedy exploration into the Q-learning loop, and analysis of benchmark results were conducted by the student/authors.
+- **Per-file notes**: each source file that an LLM wrote or changed says so in its header, with what was changed. For example, the merged training loop in `src/learn/train.cpp`, the command-line version of `apps/run_q_learning.cpp`, `tools/run_experiments.sh` and the `run_q_learning` part of "Building and Running" below were written by Claude (Anthropic) on 2026-11-26 at the request of Jagjit.
 
 ---
 
@@ -70,7 +71,8 @@ The learner acts as a **Q-value function approximator** for the current ball hol
 ├── apps/
 │   ├── common.hpp              # Shared logging, stats, CSV export
 │   ├── run_benchmarks.cpp      # Baseline evaluation (AlwaysHold, Random, HandCoded)
-│   ├── run_q_learning.cpp      # Tile Coding & RBF sweep experiment runner
+│   ├── run_q_learning.cpp      # Tile coding & RBF trainer (command-line options, Q-learning or Sarsa)
+│   ├── replay_rbf.cpp          # Plays saved RBF weights greedily and logs positions for viewer.py
 │   └── train_neural_net.cpp    # Standalone Neural Net trainer & evaluator
 ├── src/
 │   ├── learn/
@@ -81,13 +83,15 @@ The learner acts as a **Q-value function approximator** for the current ball hol
 │   │   ├── rbf.cpp             # Radial basis function implementation
 │   │   ├── tile_coding.cpp     # Tile coding (CMAC) implementation
 │   │   ├── train.hpp           # Training & greedy evaluation loop interfaces
-│   │   └── train.cpp           # RL training routines (Q-learning & Sarsa with epsilon-greedy)
+│   │   └── train.cpp           # One training loop (Q-learning or Sarsa, epsilon-greedy) and greedy evaluation
 │   └── sim/
 │       ├── keepaway_env.hpp    # 3-v-2 continuous physics environment definitions
 │       └── keepaway_env.cpp    # Environment kinematics, state normalization, policies
 ├── tools/
 │   ├── plot_nn_results.py      # Plotting script for neural network benchmarks
 │   ├── plot_results.py         # Plotting script for TC and RBF sweeps
+│   ├── plot_final.py           # Final TC / RBF / NN comparison and learned-weights figures
+│   ├── run_experiments.sh      # One command per tile coding / RBF experiment case
 │   └── viewer.py               # Trajectory visualizer
 ├── results/
 │   ├── figures/                # Output publication figures (PNG)
@@ -116,6 +120,9 @@ Run with Sarsa:
 ./build/train_neural_net --algo sarsa --episodes 1000 --eval-episodes 200 --alpha 0.01 --hidden 20 --epsilon 0.02
 ```
 
+By default all three keepers learn, as in the tile coding / RBF runs (`--learners 3`);
+`--learners 1` trains one keeper with two hand-coded teammates.
+
 Run using the 13–20–3 Shared-Hidden-Layer architecture:
 ```bash
 ./build/train_neural_net --algo qlearn --shared --episodes 1000 --eval-episodes 200
@@ -126,9 +133,24 @@ Run using the 13–20–3 Shared-Hidden-Layer architecture:
 # Run heuristic baselines:
 ./build/run_benchmarks 200 1
 
-# Run tile coding sweep:
-./build/run_q_learning tc_tile_sweep
+# Tile coding or RBF with the final settings (Q-learning, 13 state variables, 10 seeds):
+./build/run_q_learning --approx tc
+./build/run_q_learning --approx rbf
+
+# Same with Sarsa, or with the 4 reduced state variables:
+./build/run_q_learning --approx tc --algo sarsa
+./build/run_q_learning --approx rbf --features reduced
+
+# All options and their defaults:
+./build/run_q_learning --help
+
+# The experiment cases (tuning sweeps and final comparisons), one command each:
+tools/run_experiments.sh list
+tools/run_experiments.sh tc_tile_sweep
 ```
+Each run writes `results/<name>_<timestamp>.csv` and the weights of every seed to
+`results/weights/<name>/seed-<seed>.txt`. `--alpha` is the fraction of the TD error moved per
+update; the program divides it by the number of active features.
 
 ### 4. Generating Visualizations
 ```bash

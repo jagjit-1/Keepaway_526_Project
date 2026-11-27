@@ -9,6 +9,11 @@
 //
 // Partially generated with assistance from AI (DeepMind Antigravity / Claude)
 // and adapted/verified by human authors.
+//
+// Changed by an LLM: Claude (Anthropic), 2026-11-26, at Jagjit's request: in
+// SubNet::backward and NeuralNet::backward_shared, the hidden-layer gradient now uses
+// the output weights from before the update. Previously the output weights were updated
+// first and the new values were used, so each step mixed two different networks.
 // ---------------------------------------------------------------------------
 
 #include "neural_net.hpp"
@@ -113,6 +118,13 @@ void SubNet::backward(const std::vector<double>& x, double target) {
   // Parameter update in direction of -dL/dtheta:
   // Delta_theta = alpha * td_error * dout/dtheta
 
+  // Hidden-layer gradients are computed first, with the output weights as they were
+  // before this update (dout/dh_j = w2_j, dh_j/dz_j = hidden_acts_[j] * (1 - hidden_acts_[j])).
+  std::vector<double> grad_h(num_hidden_);
+  for (int j = 0; j < num_hidden_; ++j) {
+    grad_h[j] = td_error * w2_[j] * d_sigmoid(hidden_acts_[j]);
+  }
+
   // 1. Output layer updates:
   // dout / db2 = 1
   // dout / dw2_j = hidden_acts_[j]
@@ -133,15 +145,12 @@ void SubNet::backward(const std::vector<double>& x, double target) {
   // dz_j / db1_j = 1
   // dz_j / dw1_ji = x_i
   for (int j = 0; j < num_hidden_; ++j) {
-    double d_act = d_sigmoid(hidden_acts_[j]);
-    double grad_h = td_error * w2_[j] * d_act;
-
-    double delta_b1 = alpha_ * grad_h;
+    double delta_b1 = alpha_ * grad_h[j];
     v_b1_[j] = momentum_ * v_b1_[j] + delta_b1;
     b1_[j] += v_b1_[j];
 
     for (int i = 0; i < num_inputs_; ++i) {
-      double delta_w1 = alpha_ * (grad_h * x[i] - weight_decay_ * w1_[j][i]);
+      double delta_w1 = alpha_ * (grad_h[j] * x[i] - weight_decay_ * w1_[j][i]);
       v_w1_[j][i] = momentum_ * v_w1_[j][i] + delta_w1;
       w1_[j][i] += v_w1_[j][i];
     }
@@ -269,6 +278,12 @@ void NeuralNet::backward_shared(const std::vector<double>& x, int action, double
     td_error = std::clamp(td_error, -1.0, 1.0);
   }
 
+  // Hidden-layer gradients first, with this action's output weights from before the update
+  std::vector<double> grad_h(cfg_.num_hidden);
+  for (int j = 0; j < cfg_.num_hidden; ++j) {
+    grad_h[j] = td_error * shared_w2_[action][j] * d_sigmoid(shared_hidden_acts_[j]);
+  }
+
   // Update output weights for selected action
   double delta_b2 = cfg_.alpha * td_error;
   v_shared_b2_[action] = cfg_.momentum * v_shared_b2_[action] + delta_b2;
@@ -282,15 +297,12 @@ void NeuralNet::backward_shared(const std::vector<double>& x, int action, double
 
   // Update shared hidden layer
   for (int j = 0; j < cfg_.num_hidden; ++j) {
-    double d_act = d_sigmoid(shared_hidden_acts_[j]);
-    double grad_h = td_error * shared_w2_[action][j] * d_act;
-
-    double delta_b1 = cfg_.alpha * grad_h;
+    double delta_b1 = cfg_.alpha * grad_h[j];
     v_shared_b1_[j] = cfg_.momentum * v_shared_b1_[j] + delta_b1;
     shared_b1_[j] += v_shared_b1_[j];
 
     for (int i = 0; i < cfg_.num_inputs; ++i) {
-      double delta_w1 = cfg_.alpha * (grad_h * x[i] - cfg_.weight_decay * shared_w1_[j][i]);
+      double delta_w1 = cfg_.alpha * (grad_h[j] * x[i] - cfg_.weight_decay * shared_w1_[j][i]);
       v_shared_w1_[j][i] = cfg_.momentum * v_shared_w1_[j][i] + delta_w1;
       shared_w1_[j][i] += v_shared_w1_[j][i];
     }

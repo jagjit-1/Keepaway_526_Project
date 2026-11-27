@@ -4,8 +4,7 @@
 //
 // Implements:
 //   - greedy and epsilon-greedy action selection
-//   - train_loop (true Q-learning with epsilon-greedy exploration)
-//   - train_rl (Sarsa and Q-learning SMDP TD updates)
+//   - train_loop (Q-learning or Sarsa, chosen by RLAlgorithm, with epsilon-greedy exploration)
 //   - evaluate_policy (evaluation of learned policy without updates)
 //
 // SMDP Temporal-Difference target formulation:
@@ -20,7 +19,12 @@
 // Changed by an LLM: Claude (Anthropic), 2026-11-23, at Jagjit's request:
 // train_rl now applies the update to the state where the action was taken
 // (q.update(x, a, target) before x = x2; previously x was overwritten first).
-// Prompts (verbatim): see the header of apps/run_q_learning.cpp, 2026-11-23.
+//
+// Changed by an LLM: Claude (Anthropic), 2026-11-26, at Jagjit's request:
+// train_rl was merged into train_loop, which now takes an RLAlgorithm. Q-learning
+// behaves exactly as the previous train_loop and Sarsa exactly as the previous
+// train_rl Sarsa branch (checked: identical results for the same seeds).
+// train_rl was removed.
 // ---------------------------------------------------------------------------
 
 #include "train.hpp"
@@ -73,80 +77,44 @@ double max_over_actions(const Approximator& q, const std::vector<double>& x) {
 }
 
 std::vector<Episode> train_loop(Approximator& q, Env& env, const Config& cfg, const std::vector<Feature>& subset,
-                                double gamma, int episodes, uint64_t seed, double epsilon) {
-  // True Q-learning loop: chooses behavior actions via epsilon-greedy exploration,
-  // while target values bootstrap off-policy via max_over_actions.
+                                RLAlgorithm algo, double gamma, int episodes, uint64_t seed, double epsilon) {
+  // One SMDP TD(0) loop for both algorithms; the behaviour policy is epsilon-greedy in both.
+  //   Q-learning: target uses max_a Q(next_state, a); the next action is chosen after the update.
+  //   Sarsa:      the next action is chosen (epsilon-greedily) before the update, used in the
+  //               target, and then played.
   std::vector<Episode> out;
   out.reserve(episodes);
   std::mt19937_64 rng(seed);
 
   for (int ep = 0; ep < episodes; ++ep) {
     StepResult r = env.reset(seed + ep);
+    std::vector<double> x;
+    Action a{};
+    if (!r.done) {
+      x = normalize(select_features(r.next.state, subset), subset, cfg);
+      a = epsilon_greedy(q, x, epsilon, rng);
+    }
 
     while (!r.done) {
-      auto x = normalize(select_features(r.next.state, subset), subset, cfg);
-      Action a = epsilon_greedy(q, x, epsilon, rng);
-
       int64_t t0 = r.next.t;
       r = env.step(a);
       int64_t k = r.t - t0;  // number of simulator steps elapsed for this decision
-      double target;
 
       if (r.done) {
-        target = -std::pow(gamma, k - 1);
-      } else {
-        auto x2 = normalize(select_features(r.next.state, subset), subset, cfg);
-        target = std::pow(gamma, k) * max_over_actions(q, x2);
+        q.update(x, a, -std::pow(gamma, k - 1));
+        break;
       }
 
-      q.update(x, a, target);
-    }
-    out.push_back({env.episode_seconds(), env.end_reason()});
-  }
-
-  return out;
-}
-
-std::vector<Episode> train_rl(Approximator& q, Env& env, const Config& cfg, const std::vector<Feature>& subset,
-                              RLAlgorithm algo, double gamma, double epsilon, int episodes, uint64_t seed) {
-  std::vector<Episode> out;
-  out.reserve(episodes);
-  std::mt19937_64 rng(seed);
-
-  for (int ep = 0; ep < episodes; ++ep) {
-    StepResult r = env.reset(seed + ep);
-    auto x = normalize(select_features(r.next.state, subset), subset, cfg);
-    Action a = epsilon_greedy(q, x, epsilon, rng);
-
-    while (!r.done) {
-      int64_t t0 = r.next.t;
-      r = env.step(a);
-      int64_t k = r.t - t0;
-
-      double target = 0.0;
-      Action next_a = a;
-      std::vector<double> x2;
-
-      if (r.done) {
-        // Terminal state: reward = -gamma^(k - 1)
-        target = -std::pow(gamma, k - 1);
+      auto x2 = normalize(select_features(r.next.state, subset), subset, cfg);
+      Action next_a;
+      if (algo == RLAlgorithm::Sarsa) {
+        next_a = epsilon_greedy(q, x2, epsilon, rng);
+        q.update(x, a, std::pow(gamma, k) * q.value(x2, next_a));
       } else {
-        x2 = normalize(select_features(r.next.state, subset), subset, cfg);
-
-        if (algo == RLAlgorithm::Sarsa) {
-          // On-policy Sarsa: pick next action using epsilon-greedy policy
-          next_a = epsilon_greedy(q, x2, epsilon, rng);
-          target = std::pow(gamma, k) * q.value(x2, next_a);
-        } else {
-          // Off-policy Q-learning: target evaluates max over actions
-          target = std::pow(gamma, k) * max_over_actions(q, x2);
-          next_a = epsilon_greedy(q, x2, epsilon, rng);
-        }
+        q.update(x, a, std::pow(gamma, k) * max_over_actions(q, x2));
+        next_a = epsilon_greedy(q, x2, epsilon, rng);
       }
-
-      // Update the state where action a was taken, then move on to the next state
-      q.update(x, a, target);
-      if (!r.done) x = x2;
+      x = std::move(x2);
       a = next_a;
     }
     out.push_back({env.episode_seconds(), env.end_reason()});

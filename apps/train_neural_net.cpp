@@ -24,7 +24,12 @@
 // tile coding and RBF); training CSV in the save_csv format (one row block per
 // seed, scored from the training curve); weights saved per seed with --weights-dir.
 // The greedy evaluation is kept as a separate CSV.
-// Prompts (verbatim): see the header of apps/run_q_learning.cpp, 2026-11-23.
+//
+// Changed by an LLM: Claude (Anthropic), 2026-11-26, at Jagjit's request: Sarsa also
+// goes through train_loop (train_rl was merged into it); new option --learners 3|1,
+// default 3, so all three keepers learn as in run_q_learning (before, the default
+// Config was used: one learning keeper and two hand-coded); the run name now includes
+// -sarsa and -1learner when those are used.
 // ---------------------------------------------------------------------------
 
 #include <iostream>
@@ -56,6 +61,7 @@ void print_usage(const char* prog) {
             << "  --gamma <val>           Discount factor (default: 0.99)\n"
             << "  --shared                Use 13-20-3 shared hidden layer architecture\n"
             << "  --features <full|reduced> State variables: all 13, or the 4 reduced ones (default: full)\n"
+            << "  --learners <3|1>        Learning keepers; with 1 the other two are hand-coded (default: 3)\n"
             << "  --seeds <N>             Number of seeds: seed, seed+100000, ... (default: 10)\n"
             << "  --seed <N>              First seed (default: 10)\n"
             << "  --weights-dir <path>    Folder for per-seed weights (default: results/weights/<run>)\n"
@@ -77,6 +83,7 @@ int main(int argc, char** argv) {
   int seed_count = 10;
   const uint64_t seed_multiplier = 100000;  // same spacing as apps/run_q_learning.cpp
   std::string features_str = "full";
+  int learners = 3;
   std::string weights_dir = "";
   std::string out_dir = "results";
 
@@ -106,6 +113,8 @@ int main(int argc, char** argv) {
       seed_count = std::stoi(argv[++i]);
     } else if (arg == "--features" && i + 1 < argc) {
       features_str = argv[++i];
+    } else if (arg == "--learners" && i + 1 < argc) {
+      learners = std::stoi(argv[++i]);
     } else if (arg == "--weights-dir" && i + 1 < argc) {
       weights_dir = argv[++i];
     } else if (arg == "--out-dir" && i + 1 < argc) {
@@ -125,9 +134,15 @@ int main(int argc, char** argv) {
     std::cerr << "--features must be full or reduced\n";
     return 1;
   }
+  if (learners != 1 && learners != 3) {
+    std::cerr << "--learners must be 1 or 3\n";
+    return 1;
+  }
   const std::vector<Feature>& features = (features_str == "full") ? kFullFeatures : kReducedFeatures;
   // Run name matches the tile-coding / RBF comparison files (cmp-tc-final, cmp-rbf-reduced-final, ...)
-  const std::string run_name = (features_str == "full") ? "cmp-nn-final" : "cmp-nn-reduced-final";
+  const std::string run_name = std::string("cmp-nn") + (algo == RLAlgorithm::Sarsa ? "-sarsa" : "") +
+                               (features_str == "reduced" ? "-reduced" : "") + (learners == 1 ? "-1learner" : "") +
+                               "-final";
   if (weights_dir.empty()) {
     weights_dir = "results/weights/" + run_name;
   }
@@ -135,9 +150,10 @@ int main(int argc, char** argv) {
   std::cout << "=========================================================\n";
   std::cout << "  3-v-2 Keepaway: Neural Network Function Approximator   \n";
   std::cout << "=========================================================\n";
-  std::cout << "Algorithm:       " << (algo == RLAlgorithm::Sarsa ? "Sarsa (on-policy, train_rl)" : "Q-learning (off-policy, train_loop)") << "\n";
+  std::cout << "Algorithm:       " << (algo == RLAlgorithm::Sarsa ? "Sarsa (on-policy, train_loop)" : "Q-learning (off-policy, train_loop)") << "\n";
   std::cout << "Architecture:    " << (shared ? "Shared hidden layer" : "3 separate networks, one per action") << "\n";
   std::cout << "Inputs:          " << features.size() << " normalized features (" << features_str << ")\n";
+  std::cout << "Learners:        " << learners << (learners == 1 ? " (other two keepers hand-coded)" : " (all keepers)") << "\n";
   std::cout << "Hidden Units:    " << hidden << " (sigmoid clamped [-45, 45])\n";
   std::cout << "Outputs:         " << kNumActions << " linear action values\n";
   std::cout << "Training Runs:   " << episodes << " episodes per seed (epsilon=" << epsilon << ")\n";
@@ -155,7 +171,10 @@ int main(int argc, char** argv) {
   for (int s = 0; s < seed_count; ++s) {
     const uint64_t run_seed = seed + s * seed_multiplier;
 
-    Config env_cfg;
+    // Same keeper setup as run_q_learning: by default all three keepers learn.
+    Config env_cfg{.keepers = {Controller::External, Controller::External, Controller::External}};
+    if (learners == 1)
+      env_cfg.keepers = {Controller::External, Controller::HandCoded, Controller::HandCoded};
     Env env(env_cfg);
 
     Config_NN nn_cfg;
@@ -174,11 +193,8 @@ int main(int argc, char** argv) {
     std::cout << "Training seed " << run_seed << "...\n";
     auto start_time = std::chrono::steady_clock::now();
 
-    // Q-learning uses train_loop, the same loop as tile coding and RBF.
-    std::vector<Episode> train_eps =
-        (algo == RLAlgorithm::QLearning)
-            ? train_loop(nn, env, env_cfg, features, gamma, episodes, run_seed, epsilon)
-            : train_rl(nn, env, env_cfg, features, algo, gamma, epsilon, episodes, run_seed);
+    // Same training loop as tile coding and RBF; algo picks the Q-learning or Sarsa update.
+    std::vector<Episode> train_eps = train_loop(nn, env, env_cfg, features, algo, gamma, episodes, run_seed, epsilon);
 
     auto end_time = std::chrono::steady_clock::now();
     double elapsed = std::chrono::duration<double>(end_time - start_time).count();
